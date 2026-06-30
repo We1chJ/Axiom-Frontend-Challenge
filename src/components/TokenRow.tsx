@@ -6,9 +6,10 @@ interface TokenRowProps {
   token: Token;
   selected: boolean;
   onSelect: (id: string) => void;
+  rankDirection: "up" | "down" | null;
 }
 
-function TokenRowComponent({ token, selected, onSelect }: TokenRowProps) {
+function TokenRowComponent({ token, selected, onSelect, rankDirection }: TokenRowProps) {
   const changeClass = token.priceChangePct >= 0 ? "up" : "down";
   const handleClick = useCallback(() => onSelect(token.id), [token.id, onSelect]);
 
@@ -18,7 +19,17 @@ function TokenRowComponent({ token, selected, onSelect }: TokenRowProps) {
       onClick={handleClick}
     >
       <div className="row__token">
-        <span className="row__name">{token.name}</span>
+        <span className="row__name">
+          {rankDirection && (
+            <span
+              className={`row__rank-arrow ${rankDirection}`}
+              title={rankDirection === "up" ? "Rank improving" : "Rank dropping"}
+            >
+              {rankDirection === "up" ? "▲" : "▼"}
+            </span>
+          )}
+          {token.name}
+        </span>
         <span className="row__ticker">{token.ticker}</span>
       </div>
       <div className="num">{formatUsd(token.priceUsd)}</div>
@@ -34,6 +45,7 @@ export const TokenRow = memo(TokenRowComponent, (prev, next) => {
   return (
     prev.token === next.token &&
     prev.selected === next.selected &&
-    prev.onSelect === next.onSelect
+    prev.onSelect === next.onSelect &&
+    prev.rankDirection === next.rankDirection
   );
 });

@@ -6,12 +6,18 @@ interface TokenListProps {
   tokens: Token[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  rankDirection: "up" | "down" | null;
 }
 
 const ROW_HEIGHT = 52;
 const BUFFER_ROWS = 5;
 
-export function TokenList({ tokens, selectedId, onSelect }: TokenListProps) {
+export function TokenList({
+  tokens,
+  selectedId,
+  onSelect,
+  rankDirection,
+}: TokenListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
 
@@ -46,6 +52,7 @@ export function TokenList({ tokens, selectedId, onSelect }: TokenListProps) {
           token={token}
           selected={token.id === selectedId}
           onSelect={onSelect}
+          rankDirection={token.id === selectedId ? rankDirection : null}
         />
       ))}
       {bottomSpacerHeight > 0 && <div style={{ height: bottomSpacerHeight }} />}

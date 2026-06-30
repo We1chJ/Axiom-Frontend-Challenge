@@ -75,6 +75,41 @@ export default function App() {
     return result;
   }, [sorted, selectedId]);
 
+  // Tracks whether the selected token's *natural* (unlocked) rank improved or
+  // worsened on the latest tick, so we can show an up/down indicator even
+  // though the row itself stays visually fixed in place.
+  const [rankDirection, setRankDirection] = useState<"up" | "down" | null>(null);
+  const prevNaturalIndexRef = useRef<number | null>(null);
+  const trackedSelectedIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (selectedId === null) {
+      trackedSelectedIdRef.current = null;
+      prevNaturalIndexRef.current = null;
+      setRankDirection(null);
+      return;
+    }
+
+    const naturalIndex = sorted.findIndex((token) => token.id === selectedId);
+    if (naturalIndex === -1) {
+      prevNaturalIndexRef.current = null;
+      setRankDirection(null);
+      return;
+    }
+
+    if (trackedSelectedIdRef.current !== selectedId) {
+      trackedSelectedIdRef.current = selectedId;
+      prevNaturalIndexRef.current = naturalIndex;
+      setRankDirection(null);
+      return;
+    }
+
+    if (prevNaturalIndexRef.current !== null && naturalIndex !== prevNaturalIndexRef.current) {
+      setRankDirection(naturalIndex < prevNaturalIndexRef.current ? "up" : "down");
+    }
+    prevNaturalIndexRef.current = naturalIndex;
+  }, [sorted, selectedId]);
+
   return (
     <div className="app">
       <header className="app__header">
@@ -104,6 +139,7 @@ export default function App() {
             tokens={displayTokens}
             selectedId={selectedId}
             onSelect={handleSelect}
+            rankDirection={rankDirection}
           />
         </section>
 

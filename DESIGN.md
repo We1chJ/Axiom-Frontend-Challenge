@@ -88,6 +88,8 @@ Wrapped filter and sort operations in `useMemo`:
 
 **UX problem:** sort key defaults to `marketCapUsd`, which drifts every 500ms tick. A selected row could jump several positions per second as its market cap moved relative to its neighbors — annoying to read while watching a single token's detail in the sidebar, and the existing highlight (a faint background tint) didn't make it obvious *why* the row was special.
 
+**Motivation, in my own words:** once you click a coin, you're committing to watch it — you don't want to lose it because it "went flying" three rows up or down the second its market cap ticked. The list should feel alive everywhere *except* the one row you're actually looking at. That's the whole point of locking the position: not a visual flourish, just removing the thing that made the selected row hard to track.
+
 ### Approach
 
 **Considered three options, picked "pin only the selected row":**
@@ -119,3 +121,46 @@ Wrapped filter and sort operations in `useMemo`:
 
 - Verify behavior when search filtering and locking interact (lock a row, then type a query that excludes then re-includes it).
 - Consider whether the lock should also survive a sort-key change, or intentionally reset (currently: lock index is relative to the array produced by the *current* sort key, so changing sort key while locked will hold the row at the same numeric index under the new ordering — worth confirming this is the intended feel, not just an accident of the implementation).
+
+---
+
+## Iteration 3: Highlight Style — Pulled Back to Flat
+
+Went through a few rounds on how the selected row should *look*, separate from the position-locking logic above:
+
+1. First pass: lock icon + left accent bar.
+2. Made it elevated — scale up, lift with `translateY`, drop shadow, neon glow ring — to make "this row is pinned" obvious at a glance.
+3. Discovered the elevation itself caused a version of the same problem the position lock was meant to fix: scaling/translating the whole `.row` moved its *text* along with it, so the selected coin's name/price could shift up into the row above and get visually cut off or blocked — the row was now "flying" via animation even though its list position was locked.
+4. Tried separating the floating effect into a `::before` background layer so text stayed static while only the tile lifted — fixed the text-blocking issue, but added real complexity (pseudo-element layering, z-index management) for a purely decorative effect.
+5. **Settled on:** no elevation, no transform, no shadow. Just a flat `background` tint + `box-shadow: inset 0 0 0 2px #4dff9e` (bright green inset border). Nothing moves, nothing can overlap or get clipped.
+
+**Why this is the right call:** the goal was always "make the selected coin easy to keep your eyes on, never moving unexpectedly" — the same reasoning behind Iteration 2's position lock. An elevated/floating highlight effect was animation for its own sake, and it reintroduced motion (and a text-clipping bug) in the one place we were specifically trying to keep still. A flat, bright, static highlight serves the actual goal better than a fancier one.
+
+---
+
+## Iteration 4: Rank-Direction Indicator
+
+### Motivation, in my own words
+
+Locking the row's position (Iteration 2) solved the "coin flying around the list" problem, but it also threw away information: once a row stops moving, you can no longer tell whether the coin is actually climbing or falling in the rankings — you only have the raw numbers in the sidebar to go on. I wanted users to still get a *relative sense* of whether the token is trending up or down in rank, just without the row itself fluctuating on screen. The row stays still; a small arrow carries the "which way is it moving" signal instead of the row's position doing it.
+
+### Approach
+
+**`App.tsx`:** each time `sorted` updates (every stream tick), compare the selected token's *natural* (unlocked) index in that fresh sort to its natural index on the previous tick:
+- Index got smaller → rank improved → green ▲
+- Index got larger → rank worsened → red ▼
+- Unchanged → keep showing the last known direction (no flicker on a tied tick)
+- New selection → no arrow until there's a second tick to compare against (nothing to compare yet)
+
+This natural index is computed independently of the locked/displayed position — it's the rank the token *would* have if it weren't pinned, which is exactly the information the lock hides.
+
+**Display:** a small ▲/▼ glyph before the token name, only on the selected row, colored with the app's existing `--up`/`--down` theme variables (same green/red already used for 24h % change) rather than introducing a new color — so it reads as part of the existing visual language instead of a new UI element.
+
+### Trade-offs
+
+**Optimized for:** giving back the directional signal that locking the row's position removes, without reintroducing the visual noise (jumping rows) that prompted the lock in the first place.
+
+**Deliberately left out:**
+- No magnitude — the arrow says *which way*, not *how much* or *how fast*. Sidebar's market cap number already carries magnitude.
+- No animation/transition on the arrow itself (flip is instant) — consistent with Iteration 3's "no unnecessary motion" conclusion.
+- Holding the last direction on a tied tick is a judgment call, not a strict "this exact tick's movement" signal — favors a stable indicator over a flickering one.

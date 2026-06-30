@@ -152,6 +152,12 @@ body {
   min-width: 0;
 }
 
+.row__rank-arrow {
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 10px;
+}
+
 .row__name {
   font-weight: 600;
   white-space: nowrap;
