@@ -135,7 +135,6 @@ body {
   cursor: pointer;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
 .row:hover {
@@ -143,15 +142,8 @@ body {
 }
 
 .row--selected {
-  position: relative;
-  z-index: 10;
   background: #1d4029;
-  border-bottom-color: transparent;
-  transform: scale(1.035) translateY(-6px);
-  box-shadow:
-    0 24px 48px rgba(0, 0, 0, 0.55),
-    0 0 0 2px #4dff9e,
-    0 0 14px 1px rgba(77, 255, 158, 0.6);
+  box-shadow: inset 0 0 0 2px #4dff9e;
 }
 
 .row__token {
