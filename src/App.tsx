@@ -1,8 +1,9 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useTokenStream } from "./data/useTokenStream";
 import { TokenList } from "./components/TokenList";
 import { Sidebar } from "./components/Sidebar";
 import { Controls, type SortKey } from "./components/Controls";
+import type { Token } from "./types";
 
 const TOKEN_COUNT = 10_000;
 const UPDATE_INTERVAL_MS = 500;
@@ -40,7 +41,39 @@ export default function App() {
     [tokens, selectedId]
   );
 
-  const handleSelect = useCallback(setSelectedId, []);
+  // Tracks the row index the selected token was at when it was selected, so
+  // we can pin it there while live re-sorting would otherwise move it.
+  const lockedIndexRef = useRef<number | null>(null);
+  const sortedRef = useRef<Token[]>(sorted);
+  useEffect(() => {
+    sortedRef.current = sorted;
+  }, [sorted]);
+
+  const handleSelect = useCallback((id: string) => {
+    setSelectedId((prev) => {
+      if (prev !== id) {
+        const idx = sortedRef.current.findIndex((token) => token.id === id);
+        lockedIndexRef.current = idx === -1 ? null : idx;
+      }
+      return id;
+    });
+  }, []);
+
+  // Reinsert the selected token at its locked index so it stays put while
+  // highlighted; everything else keeps reordering live around it.
+  const displayTokens = useMemo(() => {
+    if (selectedId === null || lockedIndexRef.current === null) return sorted;
+
+    const selectedIndex = sorted.findIndex((token) => token.id === selectedId);
+    if (selectedIndex === -1) return sorted;
+
+    const token = sorted[selectedIndex];
+    const rest = sorted.filter((t) => t.id !== selectedId);
+    const insertAt = Math.min(lockedIndexRef.current, rest.length);
+    const result = rest.slice();
+    result.splice(insertAt, 0, token);
+    return result;
+  }, [sorted, selectedId]);
 
   return (
     <div className="app">
@@ -68,7 +101,7 @@ export default function App() {
             <div className="num">24h</div>
           </div>
           <TokenList
-            tokens={sorted}
+            tokens={displayTokens}
             selectedId={selectedId}
             onSelect={handleSelect}
           />

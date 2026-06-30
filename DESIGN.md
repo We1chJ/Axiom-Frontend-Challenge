@@ -79,3 +79,43 @@ Wrapped filter and sort operations in `useMemo`:
 - Are 5 buffer rows enough, or do we need more/less? (Current: 5, typical viewport: ~24 rows)
 - Should we debounce scroll events instead of sync calculations?
 - Is memoization comparison cost worth the save? (Likely yes, but worth measuring)
+
+---
+
+## Iteration 2: Lock Selected Row's Position
+
+### Discovery
+
+**UX problem:** sort key defaults to `marketCapUsd`, which drifts every 500ms tick. A selected row could jump several positions per second as its market cap moved relative to its neighbors — annoying to read while watching a single token's detail in the sidebar, and the existing highlight (a faint background tint) didn't make it obvious *why* the row was special.
+
+### Approach
+
+**Considered three options, picked "pin only the selected row":**
+
+1. **Pin only the selected row** (chosen) — freeze the selected token's index in the rendered list at the moment of selection; let every other row keep reordering live around it. Falls back to natural sort position the moment a different row is selected.
+2. Freeze the whole list while anything is selected — simpler, but stops *all* rows from reordering, which contradicts the "feed stays live" requirement more broadly than necessary.
+3. Visual-only fix (stronger highlight, no position lock) — addressed the visibility problem but not the actual jumping-row complaint.
+
+**Implementation (`App.tsx`):**
+- `sortedRef` — a ref kept in sync with the latest `sorted` array via `useEffect`, so the click handler can read current rank without making `handleSelect` depend on `sorted` (which would break its referential stability and defeat the `TokenRow` memoization from Iteration 1).
+- `lockedIndexRef` — captures the row's index in `sorted` at the moment of selection (inside `handleSelect`, using `sortedRef.current`, not `sorted` directly, to avoid a stale closure).
+- `displayTokens` (`useMemo`) — on every render, if a token is selected and locked, pulls it out of the freshly-sorted array and reinserts it at the locked index. Every other row is unaffected and keeps reordering normally.
+- Lock is implicitly released the instant `selectedId` changes (new index captured) — there's no separate "unlock" state to manage.
+
+**Visual indicator (`TokenRow.tsx`, `index.css`):**
+- Added a 🔒 icon before the selected row's name with a tooltip ("Position locked while selected"), so the lock isn't just inferred from behavior — it's labeled.
+- Strengthened `.row--selected` from a faint background tint to a left accent bar (`box-shadow: inset 3px 0 0 var(--accent)`) plus a subtle border glow, so the row is unambiguous at a glance even before noticing it's not moving.
+
+### Trade-offs
+
+**Optimized for:** readability while watching one token's live detail — you can track a row by eye without it sliding around the list.
+
+**Deliberately left out:**
+- No deselect-by-reclicking — clicking the already-selected row is a no-op (matches the prior behavior, not introduced by this change).
+- The locked row's *neighbors* still compress/expand around it as the list reorders, which can look slightly odd directly above/below the pinned row. Accepted as the necessary cost of pinning only one row instead of freezing everything.
+- Lock index isn't re-validated against extreme list-length changes (e.g., a search query that reduces results to fewer rows than the locked index) — handled via `Math.min(lockedIndex, rest.length)` clamp, but not extensively tested against rapid filter changes while a row is locked.
+
+### Next Steps
+
+- Verify behavior when search filtering and locking interact (lock a row, then type a query that excludes then re-includes it).
+- Consider whether the lock should also survive a sort-key change, or intentionally reset (currently: lock index is relative to the array produced by the *current* sort key, so changing sort key while locked will hold the row at the same numeric index under the new ordering — worth confirming this is the intended feel, not just an accident of the implementation).
