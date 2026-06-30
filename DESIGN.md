@@ -190,3 +190,39 @@ Sampled the DOM row count every 20ms immediately after page load (Playwright). H
 **Optimized for:** correctness on first paint, at the cost of one extra layout-effect measurement per mount (negligible — runs once, not per tick).
 
 **Deliberately left out:** no `ResizeObserver` to keep `containerHeight` in sync if the window is resized after mount. Out of scope for the reported bug (which was specifically about initial load), but worth revisiting if window resizing while the feed is open turns out to matter.
+
+---
+
+## Iteration 6: Pause/Lock Button
+
+### Motivation
+
+A per-row lock (Iteration 2) helps you track one coin, but sometimes you want to freeze the *whole feed* for a moment — to read several rows at once, compare numbers, or just stop the wall of green/red flicker — without losing the ability to search or re-sort while you're looking. Added a Pause button next to the search bar for that.
+
+### Approach
+
+**First pass (wrong layer):** froze the *final rendered list* (`displayTokens`) by snapshotting it into a ref the instant `paused` turned on, and feeding that frozen snapshot to `TokenList`. This worked for freezing price ticks, but had a real bug: search and sort silently stopped doing anything while paused, since the snapshot was already computed and nothing re-derived it from new query/sortKey state.
+
+**Fix (correct layer):** moved the freeze down to the *input data* instead of the output. `effectiveTokens` snapshots the raw `tokens` array the moment pause turns on; `filtered` → `sorted` → `displayTokens` all still recompute live from that frozen snapshot on every render. So:
+- Search query changes → `filtered` recomputes against frozen data → updates instantly, even while paused.
+- Sort key changes → `sorted` recomputes against frozen data → updates instantly, even while paused.
+- Price/market-cap ticks → `tokens` keeps changing underneath, but `effectiveTokens` ignores it until unpaused → nothing reorders or re-renders from ticks alone.
+
+This is a "freeze the inputs, not the outputs" pattern — letting the existing derivation chain (filter → sort → lock-position) keep working unmodified, instead of needing a second freeze mechanism bolted onto the end of it.
+
+**Sidebar stays live regardless of pause** — `selectedToken` is derived from raw `tokens`, never from `effectiveTokens`, so the detail panel for whatever's selected keeps ticking even while the feed list is frozen. This matches the existing requirement that the sidebar must always update live.
+
+**Rank-direction arrow (Iteration 4)** is explicitly skipped while paused (`if (paused) return` in its effect) — holds its last value rather than reacting to user-triggered re-sorts, since those aren't the kind of "movement" the arrow is meant to signal.
+
+### Trade-offs
+
+**Optimized for:** pause meaning "stop the data from changing," not "stop the UI from responding." Search/sort remain fully interactive controls regardless of pause state.
+
+**Deliberately left out:**
+- No visual indication on individual cells/rows that they're "stale" while paused (e.g., a dimming or timestamp) — the Pause button's own active state is the only signal.
+- No auto-resume after a timeout — pause is sticky until explicitly toggled off.
+- Selecting a row while paused still locks its position (Iteration 2) on top of the frozen snapshot — the two features compose without special-casing.
+
+### Verification
+
+Playwright: confirmed (1) the list stays byte-identical across 1.5s while paused with no input changes, (2) typing a search query while paused immediately filters the frozen snapshot to matching rows only, (3) changing the sort key while paused immediately re-orders the frozen snapshot, and (4) the sidebar's price for a selected token kept changing across 8 samples (~5s) while the feed list stayed paused.

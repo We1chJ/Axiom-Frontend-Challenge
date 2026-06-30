@@ -11,6 +11,8 @@ interface ControlsProps {
   onSortKeyChange: (value: SortKey) => void;
   visibleCount: number;
   totalCount: number;
+  paused: boolean;
+  onTogglePause: () => void;
 }
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
@@ -27,6 +29,8 @@ export function Controls({
   onSortKeyChange,
   visibleCount,
   totalCount,
+  paused,
+  onTogglePause,
 }: ControlsProps) {
   return (
     <div className="controls">
@@ -36,6 +40,15 @@ export function Controls({
         value={query}
         onChange={(e) => onQueryChange(e.target.value)}
       />
+      <button
+        type="button"
+        className={`controls__pause${paused ? " controls__pause--active" : ""}`}
+        onClick={onTogglePause}
+        aria-pressed={paused}
+        title={paused ? "Resume live updates" : "Pause and lock the list"}
+      >
+        {paused ? "▶ Resume" : "⏸ Pause"}
+      </button>
       <select
         value={sortKey}
         onChange={(e) => onSortKeyChange(e.target.value as SortKey)}

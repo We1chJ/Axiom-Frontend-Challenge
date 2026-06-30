@@ -19,18 +19,35 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("marketCapUsd");
+  const [paused, setPaused] = useState(false);
+
+  // While paused, freeze the underlying token *data* at whatever it was when
+  // pause was toggled on. Search and sort still run live against this frozen
+  // snapshot, so they stay fully interactive — only the price/market-cap
+  // ticks (and the reordering they'd otherwise cause) stop.
+  const pausedTokensRef = useRef<Token[] | null>(null);
+  const effectiveTokens = useMemo(() => {
+    if (paused) {
+      if (pausedTokensRef.current === null) {
+        pausedTokensRef.current = tokens;
+      }
+      return pausedTokensRef.current;
+    }
+    pausedTokensRef.current = null;
+    return tokens;
+  }, [paused, tokens]);
 
   const normalizedQuery = useMemo(() => query.trim().toLowerCase(), [query]);
 
   const filtered = useMemo(() => {
-    if (!normalizedQuery) return tokens;
-    return tokens.filter((token) => {
+    if (!normalizedQuery) return effectiveTokens;
+    return effectiveTokens.filter((token) => {
       return (
         token.name.toLowerCase().includes(normalizedQuery) ||
         token.ticker.toLowerCase().includes(normalizedQuery)
       );
     });
-  }, [tokens, normalizedQuery]);
+  }, [effectiveTokens, normalizedQuery]);
 
   const sorted = useMemo(() => {
     return filtered.slice().sort((a, b) => b[sortKey] - a[sortKey]);
@@ -83,6 +100,8 @@ export default function App() {
   const trackedSelectedIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (paused) return; // freeze whatever direction was last shown
+
     if (selectedId === null) {
       trackedSelectedIdRef.current = null;
       prevNaturalIndexRef.current = null;
@@ -108,7 +127,11 @@ export default function App() {
       setRankDirection(naturalIndex < prevNaturalIndexRef.current ? "up" : "down");
     }
     prevNaturalIndexRef.current = naturalIndex;
-  }, [sorted, selectedId]);
+  }, [sorted, selectedId, paused]);
+
+  const handleTogglePause = useCallback(() => {
+    setPaused((p) => !p);
+  }, []);
 
   return (
     <div className="app">
@@ -126,6 +149,8 @@ export default function App() {
             onSortKeyChange={setSortKey}
             visibleCount={sorted.length}
             totalCount={tokens.length}
+            paused={paused}
+            onTogglePause={handleTogglePause}
           />
           <div className="feed__head">
             <div>Token</div>

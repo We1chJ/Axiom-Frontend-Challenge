@@ -97,6 +97,27 @@ body {
   min-width: 160px;
 }
 
+.controls__pause {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.controls__pause:hover {
+  background: var(--panel);
+}
+
+.controls__pause--active {
+  background: rgba(63, 185, 80, 0.18);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .controls__count {
   margin-left: auto;
   font-size: 12px;
