@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useLayoutEffect } from "react";
 import type { Token } from "../types";
 import { TokenRow } from "./TokenRow";
 
@@ -20,6 +20,17 @@ export function TokenList({
 }: TokenListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(0);
+
+  // Measure synchronously after mount, before paint, so the real row count
+  // is known on the first frame instead of falling back to 0 (which would
+  // only render the buffer rows until some unrelated re-render happened to
+  // pick up the now-attached ref).
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    setContainerHeight(container.clientHeight);
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -33,7 +44,6 @@ export function TokenList({
     return () => container.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const containerHeight = containerRef.current?.clientHeight || 0;
   const visibleStart = Math.floor(scrollTop / ROW_HEIGHT);
   const visibleCount = Math.ceil(containerHeight / ROW_HEIGHT);
 

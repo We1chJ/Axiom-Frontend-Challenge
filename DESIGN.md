@@ -164,3 +164,29 @@ This natural index is computed independently of the locked/displayed position �
 - No magnitude — the arrow says *which way*, not *how much* or *how fast*. Sidebar's market cap number already carries magnitude.
 - No animation/transition on the arrow itself (flip is instant) — consistent with Iteration 3's "no unnecessary motion" conclusion.
 - Holding the last direction on a tied tick is a judgment call, not a strict "this exact tick's movement" signal — favors a stable indicator over a flickering one.
+
+---
+
+## Iteration 5: Fix — Row Count Flash on Initial Load
+
+### Discovery
+
+**Reported symptom:** on every page refresh, the feed would briefly show only ~5 rows before "loading up" to the full visible count.
+
+**Root cause (`TokenList.tsx`):** `containerHeight` was read directly off `containerRef.current?.clientHeight` *during render*. On the very first render, the ref hasn't attached to the DOM yet (refs populate only after React commits the DOM), so `containerRef.current` was `null` and `containerHeight` fell back to `0`. That made `visibleCount = Math.ceil(0 / 52) = 0`, so the virtualization math only rendered the `BUFFER_ROWS` (5) rows — nothing else. The list only "corrected" itself once some unrelated state change forced a re-render that happened to read the by-then-populated ref (the first 500ms stream tick, or a scroll event) — which is exactly the "shows five, then loads up" behavior described.
+
+This was a real bug, not a cosmetic one: it meant the first frame after every refresh under-rendered the list by design, for up to 500ms.
+
+### Fix
+
+Added a `useLayoutEffect` that measures `clientHeight` synchronously right after mount — before the browser paints — and stores it in state (`containerHeight`), instead of reading the ref inline during render. `useLayoutEffect` (vs. `useEffect`) matters here specifically because it runs before paint, so the corrected row count is what the user sees on the very first frame, not a flash followed by a correction.
+
+### Verification
+
+Sampled the DOM row count every 20ms immediately after page load (Playwright). Held steady at the correct count (17, matching the viewport) from the very first sample — no dip to 5 observed.
+
+### Trade-offs
+
+**Optimized for:** correctness on first paint, at the cost of one extra layout-effect measurement per mount (negligible — runs once, not per tick).
+
+**Deliberately left out:** no `ResizeObserver` to keep `containerHeight` in sync if the window is resized after mount. Out of scope for the reported bug (which was specifically about initial load), but worth revisiting if window resizing while the feed is open turns out to matter.
