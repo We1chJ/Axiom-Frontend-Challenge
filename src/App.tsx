@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useTokenStream } from "./data/useTokenStream";
 import { TokenList } from "./components/TokenList";
 import { Sidebar } from "./components/Sidebar";
@@ -19,19 +19,28 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("marketCapUsd");
 
-  // Filter + sort run on every render, including every stream tick.
-  const normalizedQuery = query.trim().toLowerCase();
-  const filtered = tokens.filter((token) => {
-    if (!normalizedQuery) return true;
-    return (
-      token.name.toLowerCase().includes(normalizedQuery) ||
-      token.ticker.toLowerCase().includes(normalizedQuery)
-    );
-  });
-  const sorted = filtered.slice().sort((a, b) => b[sortKey] - a[sortKey]);
+  const normalizedQuery = useMemo(() => query.trim().toLowerCase(), [query]);
 
-  const selectedToken =
-    tokens.find((token) => token.id === selectedId) ?? null;
+  const filtered = useMemo(() => {
+    if (!normalizedQuery) return tokens;
+    return tokens.filter((token) => {
+      return (
+        token.name.toLowerCase().includes(normalizedQuery) ||
+        token.ticker.toLowerCase().includes(normalizedQuery)
+      );
+    });
+  }, [tokens, normalizedQuery]);
+
+  const sorted = useMemo(() => {
+    return filtered.slice().sort((a, b) => b[sortKey] - a[sortKey]);
+  }, [filtered, sortKey]);
+
+  const selectedToken = useMemo(
+    () => tokens.find((token) => token.id === selectedId) ?? null,
+    [tokens, selectedId]
+  );
+
+  const handleSelect = useCallback(setSelectedId, []);
 
   return (
     <div className="app">
@@ -61,7 +70,7 @@ export default function App() {
           <TokenList
             tokens={sorted}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            onSelect={handleSelect}
           />
         </section>
 

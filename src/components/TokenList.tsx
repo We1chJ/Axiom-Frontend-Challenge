@@ -1,3 +1,4 @@
+import { useRef, useState, useEffect } from "react";
 import type { Token } from "../types";
 import { TokenRow } from "./TokenRow";
 
@@ -7,17 +8,39 @@ interface TokenListProps {
   onSelect: (id: string) => void;
 }
 
-/**
- * Renders the feed.
- *
- * NOTE: this maps over every token and mounts a DOM node for each one. With a
- * few hundred rows that's fine; with tens of thousands of live-updating rows it
- * is not. This is the part of the app the challenge is about.
- */
+const ROW_HEIGHT = 52;
+const BUFFER_ROWS = 5;
+
 export function TokenList({ tokens, selectedId, onSelect }: TokenListProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      setScrollTop(container.scrollTop);
+    };
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const containerHeight = containerRef.current?.clientHeight || 0;
+  const visibleStart = Math.floor(scrollTop / ROW_HEIGHT);
+  const visibleCount = Math.ceil(containerHeight / ROW_HEIGHT);
+
+  const renderStart = Math.max(0, visibleStart - BUFFER_ROWS);
+  const renderEnd = Math.min(tokens.length, visibleStart + visibleCount + BUFFER_ROWS);
+
+  const topSpacerHeight = renderStart * ROW_HEIGHT;
+  const bottomSpacerHeight = (tokens.length - renderEnd) * ROW_HEIGHT;
+
   return (
-    <div className="feed__list">
-      {tokens.map((token) => (
+    <div className="feed__list" ref={containerRef}>
+      {topSpacerHeight > 0 && <div style={{ height: topSpacerHeight }} />}
+      {tokens.slice(renderStart, renderEnd).map((token) => (
         <TokenRow
           key={token.id}
           token={token}
@@ -25,6 +48,7 @@ export function TokenList({ tokens, selectedId, onSelect }: TokenListProps) {
           onSelect={onSelect}
         />
       ))}
+      {bottomSpacerHeight > 0 && <div style={{ height: bottomSpacerHeight }} />}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { memo, useCallback } from "react";
 import type { Token } from "../types";
 import { formatUsd, formatPct } from "../format";
 
@@ -7,13 +8,14 @@ interface TokenRowProps {
   onSelect: (id: string) => void;
 }
 
-export function TokenRow({ token, selected, onSelect }: TokenRowProps) {
+function TokenRowComponent({ token, selected, onSelect }: TokenRowProps) {
   const changeClass = token.priceChangePct >= 0 ? "up" : "down";
+  const handleClick = useCallback(() => onSelect(token.id), [token.id, onSelect]);
 
   return (
     <div
       className={`row${selected ? " row--selected" : ""}`}
-      onClick={() => onSelect(token.id)}
+      onClick={handleClick}
     >
       <div className="row__token">
         <span className="row__name">{token.name}</span>
@@ -27,3 +29,11 @@ export function TokenRow({ token, selected, onSelect }: TokenRowProps) {
     </div>
   );
 }
+
+export const TokenRow = memo(TokenRowComponent, (prev, next) => {
+  return (
+    prev.token === next.token &&
+    prev.selected === next.selected &&
+    prev.onSelect === next.onSelect
+  );
+});
