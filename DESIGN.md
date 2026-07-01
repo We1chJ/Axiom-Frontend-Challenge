@@ -94,5 +94,5 @@ Many optimizations were made to get a better user experience and maintain good p
 # Next Steps
 
 1. Radix sort the numeric key in the worker — removes the last per-tick cost at 1M.
-2. Delete the now-unused `useTokenStream.ts` / `generateTokens.ts` (replaced by the worker).
+2. Expose `TOKEN_COUNT` as a documented stress toggle (defaults to the 10k spec; 1M is opt-in for the stress test in iteration 5).
 3. Conduct customer tests and user experience survey to gain ideas about features and deliberate choices.

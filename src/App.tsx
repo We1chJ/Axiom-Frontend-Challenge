@@ -3,7 +3,7 @@ import { TokenList } from "./components/TokenList";
 import { Sidebar } from "./components/Sidebar";
 import { Controls } from "./components/Controls";
 
-const TOKEN_COUNT = 1_000_000;
+const TOKEN_COUNT = 10_000;
 const UPDATE_INTERVAL_MS = 500;
 const CHURN = 0.3;
 
