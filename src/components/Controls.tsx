@@ -1,8 +1,5 @@
-export type SortKey =
-  | "marketCapUsd"
-  | "volume24hUsd"
-  | "priceChangePct"
-  | "ageSeconds";
+import type { SortKey } from "../data/feedProtocol";
+export type { SortKey };
 
 interface ControlsProps {
   query: string;

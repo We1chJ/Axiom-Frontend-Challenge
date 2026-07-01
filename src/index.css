@@ -150,6 +150,15 @@ body {
   overflow-x: hidden;
 }
 
+.feed__loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
 .row {
   height: 52px;
   border-bottom: 1px solid var(--border);

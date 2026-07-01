@@ -3,29 +3,37 @@ import type { Token } from "../types";
 import { TokenRow } from "./TokenRow";
 
 interface TokenListProps {
-  tokens: Token[];
+  /** Total rows in the (filtered) list — drives the scrollable height. */
+  total: number;
+  /** Index of the first row in `rows` within the full list. */
+  windowStart: number;
+  /** The materialized rows for the current viewport (from the worker). */
+  rows: Token[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   rankDirection: "up" | "down" | null;
+  /** Report the row range the viewport wants so the worker can supply it. */
+  onRangeChange: (start: number, end: number) => void;
 }
 
 const ROW_HEIGHT = 52;
-const BUFFER_ROWS = 5;
+// Generous buffer hides the one-frame latency of the worker round-trip when
+// scrolling fast, so freshly exposed rows are almost always already present.
+const BUFFER_ROWS = 20;
 
 export function TokenList({
-  tokens,
+  total,
+  windowStart,
+  rows,
   selectedId,
   onSelect,
   rankDirection,
+  onRangeChange,
 }: TokenListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(0);
 
-  // Measure synchronously after mount, before paint, so the real row count
-  // is known on the first frame instead of falling back to 0 (which would
-  // only render the buffer rows until some unrelated re-render happened to
-  // pick up the now-attached ref).
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -35,28 +43,33 @@ export function TokenList({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-
-    const handleScroll = () => {
-      setScrollTop(container.scrollTop);
-    };
-
+    const handleScroll = () => setScrollTop(container.scrollTop);
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => container.removeEventListener("scroll", handleScroll);
   }, []);
 
   const visibleStart = Math.floor(scrollTop / ROW_HEIGHT);
   const visibleCount = Math.ceil(containerHeight / ROW_HEIGHT);
-
   const renderStart = Math.max(0, visibleStart - BUFFER_ROWS);
-  const renderEnd = Math.min(tokens.length, visibleStart + visibleCount + BUFFER_ROWS);
+  const renderEnd = Math.min(total, visibleStart + visibleCount + BUFFER_ROWS);
 
-  const topSpacerHeight = renderStart * ROW_HEIGHT;
-  const bottomSpacerHeight = (tokens.length - renderEnd) * ROW_HEIGHT;
+  // Ask the worker for the range this viewport needs.
+  useEffect(() => {
+    onRangeChange(renderStart, renderEnd);
+  }, [renderStart, renderEnd, onRangeChange]);
+
+  // Spacers are derived from the delivered window (not the desired range) so
+  // the rendered rows always sit at the correct scroll offset.
+  const topSpacerHeight = windowStart * ROW_HEIGHT;
+  const bottomSpacerHeight = Math.max(
+    0,
+    (total - (windowStart + rows.length)) * ROW_HEIGHT
+  );
 
   return (
     <div className="feed__list" ref={containerRef}>
       {topSpacerHeight > 0 && <div style={{ height: topSpacerHeight }} />}
-      {tokens.slice(renderStart, renderEnd).map((token) => (
+      {rows.map((token) => (
         <TokenRow
           key={token.id}
           token={token}
