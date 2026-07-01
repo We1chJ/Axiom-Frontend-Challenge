@@ -226,3 +226,47 @@ This is a "freeze the inputs, not the outputs" pattern — letting the existing 
 ### Verification
 
 Playwright: confirmed (1) the list stays byte-identical across 1.5s while paused with no input changes, (2) typing a search query while paused immediately filters the frozen snapshot to matching rows only, (3) changing the sort key while paused immediately re-orders the frozen snapshot, and (4) the sidebar's price for a selected token kept changing across 8 samples (~5s) while the feed list stayed paused.
+
+---
+
+## Iteration 7: Stress Test — Where Does the Current Architecture Actually Break?
+
+### Motivation
+
+Every diagnosis up to this point was reasoning-based ("this is O(n log n), it must scale poorly") rather than measured. To find the actual ceiling instead of guessing, I temporarily cranked `TOKEN_COUNT` up (10k → 100k → 1M), profiled at each scale, then reverted back to the spec's 10k. This wasn't a rendering test — the point was to find where the *unaddressed* bottleneck (the full array copy + full re-sort in `useTokenStream`/`App.tsx`, called out as an open item in Iteration 1 but never fixed) actually starts to matter.
+
+### Method
+
+For each scale: load the page fresh, then in-browser (no code changes to the app):
+- **Load time** — `Date.now()` from navigation start to the first `.row` appearing in the DOM.
+- **Idle frame time** — sample 90 `requestAnimationFrame` deltas with no user interaction (just the 500ms stream tick running), report the average and how many frames exceeded 33.4ms (i.e., slower than 30fps).
+- **Scroll frame time** — same rAF sampling, but driving `feed__list.scrollTop` back and forth every frame to simulate active scrolling.
+- **DOM row count** — sanity check that virtualization is still only rendering the visible window, independent of total token count.
+
+### Results
+
+| Scale | Load time | DOM rows | Idle avg frame | Idle dropped (of 90) | Scroll avg frame | Scroll dropped (of 90) |
+|---|---|---|---|---|---|---|
+| 10k (spec) | 168ms | 22 | 33ms | 1 | 16.6ms (~60fps) | 0 |
+| 100k | 271ms | 22 | 35ms | 6 | 19.4ms (~52fps) | 3 |
+| 1M | 2,212ms | 20 | **758ms** | 59 | **1,302ms** | 89 |
+
+### What this confirms
+
+**Virtualization scales perfectly on its own axis** — DOM row count stays flat (~20-22) regardless of total token count, from 10k to 1M. That part of Iteration 1 is genuinely solved, not just solved-at-this-scale.
+
+**Everything downstream of the full-array-copy-and-resort does not scale**, and the 100k→1M jump makes it undeniable: idle frame time goes from 35ms to 758ms (unresponsive most of every second, with *zero scrolling*), and scroll frame time goes to 1.3s/frame (89 of 90 frames dropped — effectively frozen). Load time also jumps to 2.2s, from `generateTokens(1_000_000)` running synchronously on mount and blocking the main thread.
+
+This is the concrete version of the gap flagged (but never fixed) in Iteration 1's "Next Steps": the `prev.slice()` full-array copy in `useTokenStream` and the `filtered.slice().sort(...)` full re-sort in `App.tsx` both cost `O(n)`/`O(n log n)` in *total* token count, not *visible* token count — so they're invisible at 10k and catastrophic at 1M.
+
+### Trade-offs / why this wasn't fixed as part of this pass
+
+**At the actual spec (10k), this bottleneck is empirically a non-issue** — 16.6ms scroll frames is a comfortable 60fps, matching the smooth behavior observed throughout manual testing. Rewriting the data layer (incremental re-sort, avoiding the full array copy, or a subscription-based store per Iteration/next-steps discussion) would be real, non-trivial engineering — and per this project's own guidance to optimize for what's actually needed rather than hypothetical scale, doing that rewrite *for a problem that doesn't exist at 10k* would be over-engineering, not correctness.
+
+**What this data is actually useful for:** knowing precisely where the ceiling is (between 100k and 1M, not "somewhere out there") turns "the architecture might not scale" from a guess into a specific, falsifiable claim — and gives a concrete starting point (incremental re-sort first, since it's the cheaper of the two fixes) if the requirements ever changed to a larger dataset.
+
+### Next Steps (if scale requirements increase)
+
+1. Incremental re-sort (binary-search insert/remove for the ~30% of tokens that changed, instead of resorting all n) — cheapest fix, would move the ceiling roughly from ~100k to somewhere past 1M.
+2. Avoid the full `prev.slice()` in `useTokenStream` — mutate/replace only the changed entries instead of copying the whole array every tick.
+3. If both of those still aren't enough: move data updates off the single-array-in-React-state model entirely, toward per-token subscriptions, so a tick only touches the rows that actually changed instead of forcing `App` to re-render and re-derive everything.
